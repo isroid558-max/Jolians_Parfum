@@ -1,0 +1,4 @@
+export const WA_NUMBERS = {
+    PALU: '6281234567890',
+    MANADO: '6289876543210'
+};
