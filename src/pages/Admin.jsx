@@ -1,8 +1,24 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useProducts } from "../context/ProductContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../data/constants";
 
 export default function Admin() {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    // SECURITY FIX (A01): Broken Access Control
+    // Mencegah akses langsung ke halaman Admin jika bukan admin
+    useEffect(() => {
+        if (!user || user.role !== 'admin') {
+            navigate('/login');
+        }
+    }, [user, navigate]);
+
+    // Mencegah rendering konten sebelum redirect selesai
+    if (!user || user.role !== 'admin') return null;
+
     const { products, addProduct, updateProduct, deleteProduct } = useProducts();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isEditing, setIsEditing] = useState(false);
@@ -12,6 +28,35 @@ export default function Admin() {
     const [formData, setFormData] = useState({
         name: '', harga: '', kategori: 'Parfum Badan', deskripsi: '', gambar: ''
     });
+
+    // --- STATE PESANAN (REAL DATA) ---
+    const [orders, setOrders] = useState([]);
+
+    // Fetch orders saat tab 'orders' aktif
+    useEffect(() => {
+        if (activeTab === 'orders' || activeTab === 'dashboard') {
+            fetch(`${API_BASE_URL}/api/orders`)
+                .then(res => res.json())
+                .then(data => setOrders(data))
+                .catch(err => console.error("Gagal ambil pesanan:", err));
+        }
+    }, [activeTab]);
+
+    const handleStatusChange = async (id, newStatus) => {
+        // Update UI Optimistic
+        setOrders(orders.map(order => order.id === id ? { ...order, status: newStatus } : order));
+        // Update Server
+        await fetch(`${API_BASE_URL}/api/orders/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+    };
+
+    // Hitung total pendapatan dari pesanan yang statusnya 'Selesai'
+    const totalRevenue = orders
+        .filter(order => order.status === 'Selesai')
+        .reduce((acc, order) => acc + (Number(order.total) || 0), 0);
 
     const handleEdit = (product) => {
         setIsEditing(true);
@@ -26,7 +71,32 @@ export default function Admin() {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const payload = { ...formData, harga: parseInt(formData.harga) };
+        
+        // SECURITY FIX (A03): Data Integrity Validation
+        // 1. Validasi Harga tidak boleh negatif
+        const hargaInt = parseInt(formData.harga);
+        if (isNaN(hargaInt) || hargaInt < 0) {
+            alert("Harga harus berupa angka valid dan tidak boleh negatif!");
+            return;
+        }
+
+        // 2. Validasi Format URL Gambar
+        try {
+            new URL(formData.gambar);
+        } catch (_) {
+            alert("Format URL gambar tidak valid! Harus diawali http:// atau https://");
+            return;
+        }
+
+        // SECURITY FIX (A03): Sanitasi input teks untuk mencegah injeksi HTML/Script
+        const sanitize = (text) => typeof text === 'string' ? text.replace(/[<>]/g, '') : text;
+
+        const payload = { 
+            ...formData, 
+            name: sanitize(formData.name),
+            deskripsi: sanitize(formData.deskripsi),
+            harga: hargaInt
+        };
         
         if (isEditing) {
             updateProduct(currentProduct.id, payload);
@@ -57,9 +127,9 @@ export default function Admin() {
                     <button onClick={() => setActiveTab('products')} className={`w-full text-left block py-2.5 px-4 rounded transition duration-200 ${activeTab === 'products' || activeTab === 'form' ? 'bg-pink-50 text-pink-600 font-medium' : 'hover:bg-gray-50 text-gray-600'}`}>
                         Manajemen Produk
                     </button>
-                    <Link to="#" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-50 text-gray-600">
+                    <button onClick={() => setActiveTab('orders')} className={`w-full text-left block py-2.5 px-4 rounded transition duration-200 ${activeTab === 'orders' ? 'bg-pink-50 text-pink-600 font-medium' : 'hover:bg-gray-50 text-gray-600'}`}>
                         Pesanan
-                    </Link>
+                    </button>
                     <Link to="/logout" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-50 text-red-600">
                         Logout
                     </Link>
@@ -76,11 +146,11 @@ export default function Admin() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white p-6 rounded-lg shadow-sm">
                         <h3 className="text-gray-500 text-sm font-medium">Total Penjualan</h3>
-                        <p className="text-3xl font-bold text-gray-800 mt-2">Rp 12.500.000</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">Rp {totalRevenue.toLocaleString('id-ID')}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow-sm">
                         <h3 className="text-gray-500 text-sm font-medium">Pesanan Baru</h3>
-                        <p className="text-3xl font-bold text-gray-800 mt-2">15</p>
+                        <p className="text-3xl font-bold text-gray-800 mt-2">{orders.filter(o => o.status === 'Pending').length}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow-sm">
                         <h3 className="text-gray-500 text-sm font-medium">Total Produk</h3>
@@ -92,32 +162,121 @@ export default function Admin() {
 
                 {/* --- PRODUCTS TAB --- */}
                 {activeTab === 'products' && (
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-gray-800">Daftar Produk</h3>
-                        <button onClick={() => { resetForm(); setActiveTab('form'); }} className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition">
-                            + Tambah Produk
-                        </button>
+                <div className="space-y-8">
+                    {/* Tabel Parfum Badan */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-pink-600">Manajemen Parfum Badan</h3>
+                            <button onClick={() => { resetForm(); setFormData({ name: '', harga: '', kategori: 'Parfum Badan', deskripsi: '', gambar: '' }); setActiveTab('form'); }} className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition">
+                                + Tambah Parfum Badan
+                            </button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead>
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {products.filter(p => p.kategori === 'Parfum Badan').map((product) => (
+                                        <tr key={product.id}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.name}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {product.harga.toLocaleString('id-ID')}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <button onClick={() => handleEdit(product)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                                                <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
+
+                    {/* Tabel Parfum Laundry */}
+                    <div className="bg-white rounded-lg shadow-sm p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-blue-600">Manajemen Parfum Laundry</h3>
+                            <button onClick={() => { resetForm(); setFormData({ name: '', harga: '', kategori: 'Parfum Laundry', deskripsi: '', gambar: '' }); setActiveTab('form'); }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                                + Tambah Parfum Laundry
+                            </button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead>
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {products.filter(p => p.kategori === 'Parfum Laundry').map((product) => (
+                                        <tr key={product.id}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.name}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {product.harga.toLocaleString('id-ID')}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <button onClick={() => handleEdit(product)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                                                <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                )}
+
+                {/* --- ORDERS TAB --- */}
+                {activeTab === 'orders' && (
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-6">Daftar Pesanan Masuk</h3>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead>
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Harga</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategori</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID Order</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pelanggan</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {products.map((product) => (
-                                    <tr key={product.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {product.harga.toLocaleString('id-ID')}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.kategori}</td>
+                                {orders.map((order) => (
+                                    <tr key={order.id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <div className="font-medium text-gray-900">{order.customer}</div>
+                                            <div className="text-xs text-gray-400">{order.date}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{order.items}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Rp {order.total.toLocaleString('id-ID')}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                                ${order.status === 'Selesai' ? 'bg-green-100 text-green-800' : 
+                                                  order.status === 'Proses' ? 'bg-blue-100 text-blue-800' : 
+                                                  order.status === 'Batal' ? 'bg-red-100 text-red-800' :
+                                                  'bg-yellow-100 text-yellow-800'}`}>
+                                                {order.status}
+                                            </span>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button onClick={() => handleEdit(product)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
-                                            <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                                            <select 
+                                                value={order.status} 
+                                                onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                                                className="text-sm border-gray-300 rounded-md shadow-sm focus:ring-pink-500 focus:border-pink-500 p-1"
+                                            >
+                                                <option value="Pending">Pending</option>
+                                                <option value="Proses">Proses</option>
+                                                <option value="Selesai">Selesai</option>
+                                                <option value="Batal">Batal</option>
+                                            </select>
                                         </td>
                                     </tr>
                                 ))}

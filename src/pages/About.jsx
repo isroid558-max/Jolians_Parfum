@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+// Import gambar dari folder assets (Pastikan file 'story.jpg' sudah ada di src/assets/)
+import storyImage from "../assets/story.jpg";
 
 export default function About() {
     return (
@@ -18,7 +20,7 @@ export default function About() {
                 <div className="flex flex-col md:flex-row items-center gap-12">
                     <div className="md:w-1/2">
                         <img 
-                            src="https://placehold.co/600x400/pink/white?text=Our+Story" 
+                            src={storyImage} 
                             alt="Tentang Kami" 
                             className="rounded-lg shadow-lg w-full"
                         />
@@ -83,12 +85,12 @@ export default function About() {
                     <div className="bg-white p-6 rounded-lg shadow-md w-full md:w-1/3">
                         <h3 className="text-xl font-bold mb-2 text-pink-500">Cabang Palu</h3>
                         <p className="text-gray-600">Jl. Contoh No. 123, Palu</p>
-                        <p className="text-gray-600 mt-2">WA: 0812-3456-7890</p>
+                        <p className="text-gray-600 mt-2">WA: 0852-4688-5534</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow-md w-full md:w-1/3">
                         <h3 className="text-xl font-bold mb-2 text-pink-500">Cabang Manado</h3>
                         <p className="text-gray-600">Jl. Sampel No. 456, Manado</p>
-                        <p className="text-gray-600 mt-2">WA: 0898-7654-3210</p>
+                        <p className="text-gray-600 mt-2">WA: 0813-4767-1991</p>
                     </div>
                 </div>
             </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../data/constants';
 
 export default function Register() {
     const navigate = useNavigate();
@@ -9,20 +10,61 @@ export default function Register() {
         password: '',
         confirmPassword: ''
     });
+    // SECURITY FIX (A04): Honeypot State untuk menjebak bot
+    const [botTrap, setBotTrap] = useState('');
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleRegister = (e) => {
+    const handleRegister = async (e) => {
         e.preventDefault();
+
+        // SECURITY FIX (A04): Cek Honeypot
+        // Jika botTrap terisi, berarti yang mengisi adalah bot (karena field ini hidden bagi manusia)
+        if (botTrap) {
+            console.warn("Bot detected!");
+            return; // Diam-diam tolak tanpa alert
+        }
+
+        // SECURITY FIX (A07): Password Policy
+        // Password minimal 8 karakter, harus ada huruf besar, huruf kecil, dan angka
+        // PERBAIKAN: Mengganti [a-zA-Z\d] menjadi . (titik) agar simbol diperbolehkan
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+        if (!passwordRegex.test(formData.password)) {
+            alert("Password lemah! Gunakan minimal 8 karakter, kombinasi huruf besar, kecil, dan angka.");
+            return;
+        }
+
         if (formData.password !== formData.confirmPassword) {
             alert("Password tidak cocok!");
             return;
         }
-        console.log("Register data:", formData);
-        // Simulasi sukses register
-        navigate('/login');
+        
+        // Kirim data ke Backend
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: formData.name,
+                    email: formData.email,
+                    password: formData.password
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert("Registrasi berhasil! Silakan login.");
+                navigate('/login');
+            } else {
+                alert(data.message || "Registrasi gagal.");
+            }
+        } catch (error) {
+            console.error("Error register:", error);
+            alert("Gagal terhubung ke server.");
+        }
     };
 
     return (
@@ -92,6 +134,19 @@ export default function Register() {
                                 placeholder="Konfirmasi Password"
                                 value={formData.confirmPassword}
                                 onChange={handleChange}
+                            />
+                        </div>
+                        {/* SECURITY FIX (A04): Honeypot Field (Hidden) */}
+                        <div className="hidden opacity-0 absolute -left-[9999px]">
+                            <label htmlFor="website-trap">Website</label>
+                            <input
+                                id="website-trap"
+                                name="website"
+                                type="text"
+                                tabIndex="-1"
+                                autoComplete="off"
+                                value={botTrap}
+                                onChange={(e) => setBotTrap(e.target.value)}
                             />
                         </div>
                     </div>

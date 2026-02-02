@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
@@ -6,8 +6,19 @@ import { useAuth } from "../context/AuthContext";
 function Menu() {
   const [isOpen, setIsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { cartCount } = useCart();
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${searchQuery.trim()}`);
+      setIsSearchOpen(false);
+      setSearchQuery("");
+    }
+  };
 
   return (
     <header className="bg-white shadow-sm sticky top-0 z-50 font-sans">
@@ -83,8 +94,21 @@ function Menu() {
                 </svg>
               </button>
               {isSearchOpen && (
-                <div className="absolute top-full right-0 mt-3 bg-white p-2 rounded-xl shadow-xl flex gap-2 border border-gray-100 animate-fade-in w-64 z-50">
-                  <input type="text" placeholder="Cari produk..." className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 w-full"/>
+                <div className="absolute top-full right-0 mt-3 bg-white p-2 rounded-xl shadow-xl border border-gray-100 animate-fade-in w-64 z-50">
+                  <form onSubmit={handleSearch} className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Cari produk..." 
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-pink-400 w-full"
+                    />
+                    <button type="submit" className="bg-pink-500 text-white p-2 rounded-lg hover:bg-pink-600 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                      </svg>
+                    </button>
+                  </form>
                 </div>
               )}
             </div>

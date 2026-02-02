@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,26 +7,68 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const navigate = useNavigate();
     const { login } = useAuth();
+    
+    // SECURITY FIX (A07): Persistent Lockout
+    // Mengambil status lockout dari localStorage agar tidak hilang saat refresh
+    const [failedAttempts, setFailedAttempts] = useState(() => parseInt(localStorage.getItem('failedAttempts') || '0'));
+    const [isLocked, setIsLocked] = useState(() => {
+        const lockoutUntil = localStorage.getItem('lockoutUntil');
+        return lockoutUntil && new Date().getTime() < parseInt(lockoutUntil);
+    });
 
-    const handleLogin = (e) => {
+    // Cek timer lockout saat komponen dimuat
+    useEffect(() => {
+        const lockoutUntil = localStorage.getItem('lockoutUntil');
+        if (lockoutUntil) {
+            const remainingTime = parseInt(lockoutUntil) - new Date().getTime();
+            if (remainingTime > 0) {
+                setTimeout(() => { 
+                    setIsLocked(false); 
+                    setFailedAttempts(0);
+                    localStorage.removeItem('lockoutUntil');
+                    localStorage.removeItem('failedAttempts');
+                }, remainingTime);
+            } else {
+                setIsLocked(false);
+                localStorage.removeItem('lockoutUntil');
+            }
+        }
+    }, []);
+
+    const handleLogin = async (e) => {
         e.preventDefault();
-        // Simulasi logika login sederhana
-        console.log("Login dengan:", email, password);
-        
+        if (isLocked) return; // Mencegah submit jika sedang terkunci
+
         const cleanEmail = email.trim(); // Membersihkan spasi di awal/akhir email
 
-        // Ganti email dan password admin di sini
-        if (cleanEmail === "isroid558@gmail.com" && password === "Izz@tvn12") {
-            login({ email: cleanEmail, role: 'admin' });
-            navigate('/admin');
-        // Ganti email dan password super admin di sini
-        } else if (cleanEmail === "isrogamers@gmail.com" && password === "Izz@tvn12") {
-            login({ email: cleanEmail, role: 'superadmin' });
-            navigate('/super-admin');
+        // Panggil fungsi login dari AuthContext (yang request ke Backend)
+        const result = await login(cleanEmail, password);
+
+        if (result.success) {
+            setFailedAttempts(0);
+            localStorage.removeItem('failedAttempts');
+            
+            if (result.role === 'admin') navigate('/admin');
+            else if (result.role === 'superadmin') navigate('/super-admin');
+            else navigate('/');
         } else {
-            // User biasa kembali ke home
-            login({ email: cleanEmail, role: 'user' });
-            navigate('/');
+            const newAttempts = failedAttempts + 1;
+            setFailedAttempts(newAttempts);
+            localStorage.setItem('failedAttempts', newAttempts);
+
+            if (newAttempts >= 3) {
+                setIsLocked(true);
+                localStorage.setItem('lockoutUntil', new Date().getTime() + 30000); // Kunci 30 detik
+                alert("Terlalu banyak percobaan gagal. Akses dikunci selama 30 detik.");
+                setTimeout(() => { 
+                    setIsLocked(false); 
+                    setFailedAttempts(0); 
+                    localStorage.removeItem('lockoutUntil');
+                    localStorage.removeItem('failedAttempts');
+                }, 30000);
+            } else {
+                alert(`${result.message || "Login gagal"}! Sisa percobaan: ${3 - newAttempts}`);
+            }
         }
     };
 
@@ -79,9 +121,10 @@ export default function Login() {
                     <div>
                         <button
                             type="submit"
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                            disabled={isLocked}
+                            className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${isLocked ? 'bg-gray-400 cursor-not-allowed' : 'bg-pink-600 hover:bg-pink-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500`}
                         >
-                            Masuk
+                            {isLocked ? "Terkunci Sementara..." : "Masuk"}
                         </button>
                     </div>
                 </form>

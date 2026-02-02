@@ -1,32 +1,43 @@
 import { createContext, useState, useContext, useEffect } from 'react';
-import { allProducts as initialProducts } from '../data/products';
+import { API_BASE_URL } from '../data/constants';
 
 const ProductContext = createContext();
 
 export const useProducts = () => useContext(ProductContext);
 
 export const ProductProvider = ({ children }) => {
-    // Inisialisasi produk dari LocalStorage atau data default
-    const [products, setProducts] = useState(() => {
-        const savedProducts = localStorage.getItem('products');
-        return savedProducts ? JSON.parse(savedProducts) : initialProducts;
-    });
+    // State awal kosong, nanti diisi dari server
+    const [products, setProducts] = useState([]);
 
-    // Simpan ke LocalStorage setiap kali ada perubahan
+    // Ambil data dari Backend saat aplikasi dimuat
     useEffect(() => {
-        localStorage.setItem('products', JSON.stringify(products));
-    }, [products]);
+        fetch(`${API_BASE_URL}/api/products`)
+            .then(res => res.json())
+            .then(data => setProducts(data))
+            .catch(err => console.error("Gagal mengambil produk:", err));
+    }, []);
 
-    const addProduct = (newProduct) => {
-        const id = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
-        setProducts(prev => [...prev, { ...newProduct, id }]);
+    const addProduct = async (newProduct) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/products`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newProduct)
+            });
+            const savedProduct = await response.json();
+            setProducts(prev => [...prev, savedProduct]);
+        } catch (err) {
+            console.error("Gagal menambah produk:", err);
+        }
     };
 
     const updateProduct = (id, updatedProduct) => {
+        // Catatan: Fitur update di backend belum dibuat, ini hanya update tampilan sementara
         setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updatedProduct } : p));
     };
 
     const deleteProduct = (id) => {
+        // Catatan: Fitur delete di backend belum dibuat, ini hanya update tampilan sementara
         setProducts(prev => prev.filter(p => p.id !== id));
     };
 

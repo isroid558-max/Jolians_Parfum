@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCart } from '../context/CartContext';
-import { WA_NUMBERS } from '../data/constants';
+import { WA_NUMBERS, API_BASE_URL } from '../data/constants';
 
 export default function Checkout() {
     const { cart, cartTotal } = useCart();
@@ -16,10 +16,28 @@ export default function Checkout() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleCheckout = () => {
+    // Helper untuk membersihkan input dari karakter berbahaya (HTML tags)
+    const sanitize = (text) => {
+        return text.replace(/[<>]/g, '');
+    };
+
+    const handleCheckout = async () => {
+        // SECURITY FIX (A03): Input Validation
+        // Pastikan nomor HP hanya berisi angka dan panjangnya wajar
+        const phoneRegex = /^[0-9]{10,15}$/;
+        if (!phoneRegex.test(formData.phone)) {
+            alert("Nomor WhatsApp tidak valid! Harap masukkan 10-15 digit angka.");
+            return;
+        }
+
+        if (formData.name.trim().length < 3) {
+            alert("Nama terlalu pendek.");
+            return;
+        }
+
         // 1. Format rincian produk
         const productDetails = cart.map(item => 
-            `- ${item.name} (x${item.quantity}) - Rp ${item.harga.toLocaleString('id-ID')}`
+            `- ${item.name} (x${item.quantity}) - Rp ${(Number(item.harga) || 0).toLocaleString('id-ID')}`
         ).join('\n');
 
         // 2. Hitung total
@@ -39,9 +57,9 @@ ${productDetails}
 -----------------------------------
 
 *DATA PENGIRIMAN:*
-*Nama:* ${formData.name}
+*Nama:* ${sanitize(formData.name)}
 *No. WhatsApp:* ${formData.phone}
-*Alamat:* ${formData.address}
+*Alamat:* ${sanitize(formData.address)}
 
 Pesanan untuk cabang *${formData.location}*.
 
@@ -52,7 +70,26 @@ Mohon konfirmasi ketersediaan dan total biayanya. Terima kasih!
         const targetNumber = formData.location === 'PALU' ? WA_NUMBERS.PALU : WA_NUMBERS.MANADO;
         const waLink = `https://wa.me/${targetNumber}?text=${encodeURIComponent(message)}`;
 
-        // 5. Arahkan ke WhatsApp
+        // 5. Simpan Pesanan ke Backend (Database)
+        try {
+            await fetch(`${API_BASE_URL}/api/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    customer: formData.name,
+                    total: total,
+                    items: cart.map(item => `${item.name} (${item.quantity})`).join(', '),
+                    phone: formData.phone,
+                    address: formData.address,
+                    location: formData.location
+                })
+            });
+        } catch (error) {
+            console.error("Gagal menyimpan pesanan ke database:", error);
+            // Tetap lanjut ke WA meskipun gagal simpan ke DB agar user tidak kecewa
+        }
+
+        // 6. Arahkan ke WhatsApp
         window.location.href = waLink;
     };
 

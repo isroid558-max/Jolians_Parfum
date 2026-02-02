@@ -14,6 +14,7 @@ import Logout from "./pages/Logout"
 import Login from "./pages/Login"
 import Register from "./pages/Register"
 import SuperAdmin from "./pages/SuperAdmin"
+import Search from "./pages/Search"
 
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
       <Route path="/login" element={<Login/>}/>
       <Route path="/register" element={<Register/>}/>
       <Route path="/logout" element={<Logout/>}/>
+      <Route path="/search" element={<Search/>}/>
       <Route path="*" element={<NotFound/>}/>
     </Routes>
   </>
